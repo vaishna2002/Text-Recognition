@@ -9,8 +9,8 @@
 #twobuttons{
   display: flex;
   flex-direction: row;
-  margin-bottom: 50px;
-  margin-top: 50px;
+  margin-bottom: 26px;
+  margin-top: 185px;
   padding-top: 100px;
 }
 
