@@ -1,104 +1,86 @@
-import React, { useRef, useEffect } from "react";
-import "./App.css";
-import { useReactMediaRecorder } from "react-media-recorder";
-import convertBlobToWav from "audio-recorder-polyfill";
-import axios from "axios";
-import FormData from "form-data";
+import React from 'react';
+import './App.css';
+import MicRecorder from 'mic-recorder-to-mp3';
+import FormData from 'form-data'
 
-const App = () => {
-  const { status, startRecording, stopRecording, mediaBlobUrl } =
-    useReactMediaRecorder({
-      audio: true,
-    });
+const Mp3Recorder = new MicRecorder({ bitRate: 128 });
 
-  const videoRef = useRef(null);
+class App extends React.Component {
+  constructor(props){
+    super(props);
+    this.state = {
+      isRecording: false,
+      blobURL: '',
+      isBlocked: false,
+    };
+  }
 
-  useEffect(() => {
-    if (status === "recording") {
-      // Access the user's camera and display the video stream
-      navigator.mediaDevices
-        .getUserMedia({ video: true })
-        .then((stream) => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        })
-        .catch((error) => {
-          console.error("Error accessing camera:", error);
-        });
-    }
-  }, [status]);
-
-  const handleDownload = async () => {
-    if (mediaBlobUrl) {
-      try {
-        const audioBlob = await fetch(mediaBlobUrl).then((response) =>
-          response.blob()
-        );
-
-        // Create a File object from the Blob with a specified filename and mime type
-        const audioFile = new File([audioBlob], "audio.wav", {
-          type: "audio/wav",
-        });
-
-        console.log(audioFile);
-
-        let data = new FormData();
-        data.append("audio_file", audioFile);
-
-        let config = {
-          method: "post",
-          maxBodyLength: Infinity,
-          url: "http://127.0.0.1:8000/predict",
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-          data: data,
-        };
-
-        axios
-          .request(config)
-          .then((response) => {
-            console.log(JSON.stringify(response.data));
-          })
-          .catch((error) => {
-            console.log(error);
-          });
-
-        // ... rest of your download logic
-      } catch (error) {
-        console.error("Error handling download:", error);
-      }
+  start = () => {
+    if (this.state.isBlocked) {
+      console.log('Permission Denied');
+    } else {
+      Mp3Recorder
+        .start()
+        .then(() => {
+          this.setState({ isRecording: true });
+        }).catch((e) => console.error(e));
     }
   };
 
-  const handleSubmit = () => {};
+  stop = () => {
+    Mp3Recorder
+      .stop()
+      .getMp3()
+      .then(([buffer, blob]) => {
+        const blobURL = URL.createObjectURL(blob)
+        this.setState({ blobURL, isRecording: false });
 
-  return (
-    <div id="container1">
-      <div id="twobuttons">
-        <button onClick={startRecording}>Start Recording</button>
-        <button onClick={stopRecording}>Stop Recording</button>
+        let file = new File([blob], 'audio.mp3');
+
+        console.log(file);
+
+        var formdata = new FormData();
+        formdata.append("audio_file", file);
+
+        var requestOptions = {
+          method: 'POST',
+          body: formdata,
+          redirect: 'follow'
+        };
+
+        fetch("http://localhost:8000/predict", requestOptions)
+          .then(response => response.text())
+          .then(result => console.log(result))
+          .catch(error => console.log('error', error));
+
+
+      }).catch((e) => console.log(e));
+  };
+
+  componentDidMount() {
+    navigator.getUserMedia({ audio: true },
+      () => {
+        console.log('Permission Granted');
+        this.setState({ isBlocked: false });
+      },
+      () => {
+        console.log('Permission Denied');
+        this.setState({ isBlocked: true })
+      },
+    );
+  }
+
+  render(){
+    return (
+      <div className="App">
+        <header className="App-header">
+          <button onClick={this.start} disabled={this.state.isRecording}>Record</button>
+          <button onClick={this.stop} disabled={!this.state.isRecording}>Stop</button>
+          <audio src={this.state.blobURL} controls="controls" />
+        </header>
       </div>
-      <div><p>Here you will get Question</p>
-      <h3>How Are You Feeling ?</h3></div>
-      <div id="record">
-        <video
-          ref={videoRef}
-          style={{ width: "100%", maxHeight: "300px" }}
-          autoPlay
-          muted
-        />
-        <audio src={mediaBlobUrl} controls autoPlay />
-        {mediaBlobUrl && (
-          <button onClick={handleDownload}>Download Recording</button>
-        )}
-      </div>
-      <div id="showbutton">
-        <button onClick={handleSubmit}>Show</button>
-      </div>
-    </div>
-  );
-};
+    );
+  }
+}
 
 export default App;
